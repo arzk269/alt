@@ -384,7 +384,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
     super.dispose();
   }
 
-  @override
+   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Profil?>(
       stream: _profilRepository.watchProfil(uid),
@@ -419,7 +419,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
                         (profil.telephone.isNotEmpty ? 1 : 0) +
                         (profil.emailCv.isNotEmpty ? 1 : 0) +
                         (profil.ville.isNotEmpty ? 1 : 0) +
-                        1 + // typeRecherche
+                        1 +
                         (profil.linkedinUrl != null && profil.linkedinUrl!.isNotEmpty ? 1 : 0) +
                         (profil.githubUrl != null && profil.githubUrl!.isNotEmpty ? 1 : 0) +
                         (profil.dateDebutSouhaitee != null ? 1 : 0) +
@@ -749,17 +749,54 @@ class _ProfilScreenState extends State<ProfilScreen> {
                           status: profil.competences.length >= 3 ? _SectionStatus.complet : (profil.competences.isEmpty ? _SectionStatus.vide : _SectionStatus.partiel),
                           detail: '${profil.competences.length}',
                           onAdd: _ajouterCompetence,
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: profil.competences.map((c) => Chip(
-                              backgroundColor: AppColors.blueSoft,
-                              side: BorderSide(color: AppColors.blue.withOpacity(0.15)),
-                              label: Text('${c.nom} · ${c.domaine}', style: monoStyle(size: 12, color: AppColors.blue)),
-                              deleteIcon: const Icon(Icons.close, size: 14),
-                              onDeleted: () => _supprimerCompetence(c),
-                            )).toList(),
-                          ),
+                          child: profil.competences.isEmpty
+                              ? _empty('Aucune compétence ajoutée pour le moment.')
+                              : Column(children: profil.competences.map((c) => Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(border: Border.all(color: AppColors.line), borderRadius: BorderRadius.circular(8)),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Expanded(
+                                            child: Row(children: [
+                                              Text(c.nom, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                              const SizedBox(width: 6),
+                                              Text('· ${c.domaine}', style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft)),
+                                            ]),
+                                          ),
+                                          IconButton(icon: const Icon(Icons.delete_outline, size: 17, color: AppColors.inkFaint), onPressed: () => _supprimerCompetence(c), splashRadius: 18),
+                                        ],
+                                      ),
+                                      if (c.items.isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        ...c.items.map((item) => Padding(
+                                          padding: const EdgeInsets.only(bottom: 3),
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('· ', style: TextStyle(fontSize: 12.5, color: AppColors.inkFaint)),
+                                              Expanded(child: Text(item, style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft))),
+                                            ],
+                                          ),
+                                        )),
+                                      ],
+                                      if (c.outils.isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        Wrap(spacing: 6, children: c.outils.map((o) => Chip(
+                                          label: Text(o, style: monoStyle(size: 10.5)),
+                                          backgroundColor: AppColors.bg,
+                                          side: const BorderSide(color: AppColors.line),
+                                          padding: EdgeInsets.zero,
+                                          visualDensity: VisualDensity.compact,
+                                        )).toList()),
+                                      ],
+                                    ],
+                                  ),
+                                )).toList()),
                         ),
                         const SizedBox(height: 20),
 
@@ -954,20 +991,35 @@ class _CompetenceDialogState extends State<_CompetenceDialog> {
   final _nomController = TextEditingController();
   final _domaineController = TextEditingController();
   final _outilsController = TextEditingController();
+  final _itemsController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Ajouter une compétence'),
       content: SizedBox(
-        width: 360,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: _nomController, decoration: const InputDecoration(labelText: 'Nom (ex. Ansys Fluent)')),
-          const SizedBox(height: 12),
-          TextField(controller: _domaineController, decoration: const InputDecoration(labelText: 'Domaine (ex. Simulation CFD)')),
-          const SizedBox(height: 12),
-          TextField(controller: _outilsController, decoration: const InputDecoration(labelText: 'Outils associés, séparés par des virgules')),
-        ]),
+        width: 380,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: _nomController, decoration: const InputDecoration(labelText: 'Nom (ex. CATIA)')),
+              const SizedBox(height: 12),
+              TextField(controller: _domaineController, decoration: const InputDecoration(labelText: 'Domaine (ex. Conception mécanique)')),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _itemsController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Ce que tu sais concrètement faire',
+                  hintText: 'Modélisation 3D, Mise en plan, Réalisation d\'assemblage',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: _outilsController, decoration: const InputDecoration(labelText: 'Outils associés (optionnel), séparés par des virgules')),
+            ],
+          ),
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
@@ -978,49 +1030,9 @@ class _CompetenceDialogState extends State<_CompetenceDialog> {
               id: DateTime.now().millisecondsSinceEpoch.toString(),
               nom: _nomController.text.trim(),
               domaine: _domaineController.text.trim(),
+              items: _itemsController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
               outils: _outilsController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
             ));
-          },
-          child: const Text('Ajouter'),
-        ),
-      ],
-    );
-  }
-}
-
-class _ConnaissanceDialog extends StatefulWidget {
-  const _ConnaissanceDialog();
-  @override
-  State<_ConnaissanceDialog> createState() => _ConnaissanceDialogState();
-}
-
-class _ConnaissanceDialogState extends State<_ConnaissanceDialog> {
-  final _nomController = TextEditingController();
-  NiveauConnaissance _niveau = NiveauConnaissance.maitrise;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Ajouter une connaissance académique'),
-      content: SizedBox(
-        width: 360,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: _nomController, decoration: const InputDecoration(labelText: 'Matière (ex. Mécanique des fluides)')),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<NiveauConnaissance>(
-            value: _niveau,
-            decoration: const InputDecoration(labelText: 'Niveau'),
-            items: NiveauConnaissance.values.map((n) => DropdownMenuItem(value: n, child: Text(niveauConnaissanceLabels[n]!))).toList(),
-            onChanged: (v) => setState(() => _niveau = v ?? _niveau),
-          ),
-        ]),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-        ElevatedButton(
-          onPressed: () {
-            if (_nomController.text.trim().isEmpty) return;
-            Navigator.pop(context, ConnaissanceAcademique(nom: _nomController.text.trim(), niveau: _niveau));
           },
           child: const Text('Ajouter'),
         ),
@@ -1376,6 +1388,47 @@ class _CertificationDialogState extends State<_CertificationDialog> {
               organisme: _organismeController.text.trim().isEmpty ? null : _organismeController.text.trim(),
               annee: _anneeController.text.trim().isEmpty ? null : _anneeController.text.trim(),
             ));
+          },
+          child: const Text('Ajouter'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ConnaissanceDialog extends StatefulWidget {
+  const _ConnaissanceDialog();
+  @override
+  State<_ConnaissanceDialog> createState() => _ConnaissanceDialogState();
+}
+
+class _ConnaissanceDialogState extends State<_ConnaissanceDialog> {
+  final _nomController = TextEditingController();
+  NiveauConnaissance _niveau = NiveauConnaissance.maitrise;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Ajouter une connaissance académique'),
+      content: SizedBox(
+        width: 360,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: _nomController, decoration: const InputDecoration(labelText: 'Matière (ex. Mécanique des fluides)')),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<NiveauConnaissance>(
+            value: _niveau,
+            decoration: const InputDecoration(labelText: 'Niveau'),
+            items: NiveauConnaissance.values.map((n) => DropdownMenuItem(value: n, child: Text(niveauConnaissanceLabels[n]!))).toList(),
+            onChanged: (v) => setState(() => _niveau = v ?? _niveau),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+        ElevatedButton(
+          onPressed: () {
+            if (_nomController.text.trim().isEmpty) return;
+            Navigator.pop(context, ConnaissanceAcademique(nom: _nomController.text.trim(), niveau: _niveau));
           },
           child: const Text('Ajouter'),
         ),

@@ -6,6 +6,7 @@ class MatchingResultDto {
   final String domainePoste;
   final int scoreMatching;
   final List<String> competencesMatchees;
+  final List<String> competencesManquantes;
   final List<String> raisonsMatching;
 
   MatchingResultDto({
@@ -14,6 +15,7 @@ class MatchingResultDto {
     required this.domainePoste,
     required this.scoreMatching,
     required this.competencesMatchees,
+    required this.competencesManquantes,
     required this.raisonsMatching,
   });
 
@@ -24,6 +26,7 @@ class MatchingResultDto {
       domainePoste: map['domainePoste'] as String? ?? '',
       scoreMatching: (map['scoreMatching'] as num?)?.toInt() ?? 0,
       competencesMatchees: List<String>.from(map['competencesMatchees'] ?? []),
+      competencesManquantes: List<String>.from(map['competencesManquantes'] ?? []),
       raisonsMatching: List<String>.from(map['raisonsMatching'] ?? []),
     );
   }
@@ -33,6 +36,7 @@ class MatchingResultDto {
       'domainePoste': domainePoste,
       'scoreMatching': scoreMatching,
       'competencesMatchees': competencesMatchees,
+      'competencesManquantes': competencesManquantes,
       'raisonsMatching': raisonsMatching,
     };
   }
@@ -41,11 +45,15 @@ class MatchingResultDto {
 class GenerationResultDto {
   final String profilResume;
   final List<Map<String, String>> experiencesTexte;
+  final List<String> competencesAMettreEnAvant;
+  final List<String> connaissancesAMettreEnAvant;
   final String lettreMotivation;
 
   GenerationResultDto({
     required this.profilResume,
     required this.experiencesTexte,
+    required this.competencesAMettreEnAvant,
+    required this.connaissancesAMettreEnAvant,
     required this.lettreMotivation,
   });
 
@@ -55,6 +63,8 @@ class GenerationResultDto {
       experiencesTexte: List<Map<String, String>>.from(
         (map['experiencesTexte'] as List? ?? []).map((e) => Map<String, String>.from(e)),
       ),
+      competencesAMettreEnAvant: List<String>.from(map['competencesAMettreEnAvant'] ?? []),
+      connaissancesAMettreEnAvant: List<String>.from(map['connaissancesAMettreEnAvant'] ?? []),
       lettreMotivation: map['lettreMotivation'] as String? ?? '',
     );
   }

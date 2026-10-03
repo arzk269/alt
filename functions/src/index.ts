@@ -14,12 +14,15 @@ interface MatchingResult {
   domainePoste: string;
   scoreMatching: number;
   competencesMatchees: string[];
+  competencesManquantes: string[];
   raisonsMatching: string[];
 }
 
 interface GenerationResult {
   profilResume: string;
   experiencesTexte: { titre: string; entreprise: string; description: string }[];
+  competencesAMettreEnAvant: string[];
+  connaissancesAMettreEnAvant: string[];
   lettreMotivation: string;
 }
 
@@ -115,7 +118,7 @@ export const matcherOffre = onCall({ secrets: [anthropicApiKey] }, async (reques
       {
         name: "renvoyer_matching",
         description:
-          "Renvoie le résultat structuré de l'analyse de correspondance entre le profil et l'offre.",
+          "Renvoie le résultat structuré de l'analyse de correspondance entre le profil et l'offre, forces ET faiblesses.",
         input_schema: {
           type: "object",
           properties: {
@@ -140,6 +143,12 @@ export const matcherOffre = onCall({ secrets: [anthropicApiKey] }, async (reques
               items: { type: "string" },
               description: "Noms exacts des compétences du profil qui correspondent à l'offre (max 5)",
             },
+            competencesManquantes: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Compétences, outils ou exigences EXPLICITEMENT mentionnés dans le texte de l'offre, que le profil ne possède PAS (absents de sa liste de compétences, connaissances académiques ou expériences). Reste court et factuel (max 5), base-toi uniquement sur ce que l'offre demande littéralement, n'invente rien. Si tout ce que demande l'offre est couvert par le profil, renvoyer un tableau vide.",
+            },
             raisonsMatching: {
               type: "array",
               items: { type: "string" },
@@ -153,6 +162,7 @@ export const matcherOffre = onCall({ secrets: [anthropicApiKey] }, async (reques
             "domainePoste",
             "scoreMatching",
             "competencesMatchees",
+            "competencesManquantes",
             "raisonsMatching",
           ],
         },
@@ -170,7 +180,7 @@ ${profilTxt}
 Offre visée:
 ${offreTexteBrut}
 
-Analyse la correspondance et appelle l'outil renvoyer_matching avec ton évaluation. Sois précis et concret, cite des éléments réels du profil dans les raisons.`,
+Analyse la correspondance dans les deux sens : ce que le profil possède et qui correspond à l'offre (forces), ET ce que l'offre demande explicitement que le profil ne possède pas (faiblesses/manques). Appelle l'outil renvoyer_matching avec ton évaluation. Sois précis et concret, cite des éléments réels du profil et du texte de l'offre.`,
       },
     ],
   });
@@ -201,6 +211,9 @@ export const genererCandidature = onCall({ secrets: [anthropicApiKey] }, async (
   const profilTxt = formaterProfilPourPrompt(data);
   const nomComplet = `${data.profil.prenom || ""} ${data.profil.nom || ""}`.trim();
 
+  const competencesDisponibles = (data.profil.competences || []).map((c: any) => c.nom);
+  const connaissancesDisponibles = (data.profil.connaissancesAcademiques || []).map((c: any) => c.nom);
+
   const client = new Anthropic({ apiKey: anthropicApiKey.value() });
 
   const response = await client.messages.create({
@@ -209,7 +222,7 @@ export const genererCandidature = onCall({ secrets: [anthropicApiKey] }, async (
     tools: [
       {
         name: "renvoyer_generation",
-        description: "Renvoie le contenu généré pour le CV et la lettre de motivation.",
+        description: "Renvoie le contenu généré et la sélection d'éléments à mettre en avant pour le CV et la lettre de motivation.",
         input_schema: {
           type: "object",
           properties: {
@@ -224,7 +237,10 @@ export const genererCandidature = onCall({ secrets: [anthropicApiKey] }, async (
                 type: "object",
                 properties: {
                   titre: { type: "string" },
-                  entreprise: { type: "string" },
+                  entreprise: {
+                    type: "string",
+                    description: "Nom de l'entreprise si c'est une expérience professionnelle. Laisser vide si c'est un projet académique/personnel.",
+                  },
                   description: {
                     type: "string",
                     description:
@@ -233,7 +249,20 @@ export const genererCandidature = onCall({ secrets: [anthropicApiKey] }, async (
                 },
                 required: ["titre", "entreprise", "description"],
               },
-              description: "Les expériences les plus pertinentes reformulées, dans l'ordre de pertinence",
+              description:
+                "Les 3 à 4 expériences ET projets les plus pertinents (piochés dans les deux listes fournies), reformulés, dans l'ordre de pertinence pour cette offre précise",
+            },
+            competencesAMettreEnAvant: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                `Sous-ensemble ORDONNÉ (le plus pertinent en premier) des noms EXACTS de compétences à afficher sur le CV pour cette offre précise, choisis strictement parmi cette liste réelle: [${competencesDisponibles.join(", ")}]. Exclus celles hors-sujet même si elles existent dans le profil (ex: des compétences dev web pour un poste mécanique). N'invente jamais un nom qui n'est pas dans la liste.`,
+            },
+            connaissancesAMettreEnAvant: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                `Sous-ensemble ORDONNÉ (le plus pertinent en premier) des noms EXACTS de connaissances académiques à afficher pour cette offre précise, choisis strictement parmi cette liste réelle: [${connaissancesDisponibles.join(", ")}]. N'invente jamais un nom qui n'est pas dans la liste.`,
             },
             lettreMotivation: {
               type: "string",
@@ -241,7 +270,13 @@ export const genererCandidature = onCall({ secrets: [anthropicApiKey] }, async (
                 "Lettre de motivation complète en français, 150-250 mots, sans formule générique creuse, qui cite des éléments concrets du profil et de l'offre",
             },
           },
-          required: ["profilResume", "experiencesTexte", "lettreMotivation"],
+          required: [
+            "profilResume",
+            "experiencesTexte",
+            "competencesAMettreEnAvant",
+            "connaissancesAMettreEnAvant",
+            "lettreMotivation",
+          ],
         },
       },
     ],
@@ -249,9 +284,9 @@ export const genererCandidature = onCall({ secrets: [anthropicApiKey] }, async (
     messages: [
       {
         role: "user",
-        content: `Tu rédiges le contenu d'un CV et d'une lettre de motivation pour ${nomComplet}, étudiant ingénieur, qui postule pour: ${poste} chez ${entreprise}.
+        content: `Tu prépares un CV et une lettre de motivation optimisés pour ${nomComplet}, étudiant ingénieur, qui postule pour: ${poste} chez ${entreprise}.
 
-Profil du candidat:
+Profil complet du candidat (toutes les données réelles disponibles):
 ${profilTxt}
 
 Offre visée:
@@ -259,8 +294,10 @@ ${offreTexteBrut}
 
 Éléments de correspondance déjà identifiés:
 - Domaine: ${matching.domainePoste}
-- Compétences pertinentes: ${matching.competencesMatchees.join(", ")}
+- Compétences pertinentes détectées: ${matching.competencesMatchees.join(", ")}
 - Raisons: ${matching.raisonsMatching.join(" / ")}
+
+Ton rôle n'est PAS d'inventer de nouvelles informations — le candidat a déjà toutes ses données réelles ci-dessus. Ton rôle est de choisir et d'agencer intelligemment ce qui compte pour CETTE offre précise, et d'écarter ce qui n'apporte rien, même si ça existe dans le profil. Un CV optimisé pour cette offre ne doit jamais ressembler à un CV générique qui liste tout sans discernement.
 
 Rédige un contenu précis, sans formules génériques d'IA, qui donne l'impression d'avoir été écrit par le candidat lui-même. Appelle l'outil renvoyer_generation.`,
       },

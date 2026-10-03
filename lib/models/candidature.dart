@@ -77,6 +77,10 @@ class Candidature {
   final List<String> competencesMatchees;
   final int scoreMatching;
   final List<String> raisonsMatching;
+  final String? profilResume;
+  final List<Map<String, String>> experiencesTexte;
+  final List<String> competencesAMettreEnAvant;
+  final List<String> connaissancesAMettreEnAvant;
   final String? cvGenereUrl;
   final String? lmGeneree;
   final StatutCandidature statut;
@@ -93,6 +97,10 @@ class Candidature {
     this.competencesMatchees = const [],
     required this.scoreMatching,
     this.raisonsMatching = const [],
+    this.profilResume,
+    this.experiencesTexte = const [],
+    this.competencesAMettreEnAvant = const [],
+    this.connaissancesAMettreEnAvant = const [],
     this.cvGenereUrl,
     this.lmGeneree,
     this.statut = StatutCandidature.aPostuler,
@@ -112,6 +120,12 @@ class Candidature {
       competencesMatchees: List<String>.from(data['competencesMatchees'] ?? []),
       scoreMatching: (data['scoreMatching'] as num?)?.toInt() ?? 0,
       raisonsMatching: List<String>.from(data['raisonsMatching'] ?? []),
+      profilResume: data['profilResume'] as String?,
+      experiencesTexte: List<Map<String, String>>.from(
+        (data['experiencesTexte'] as List? ?? []).map((e) => Map<String, String>.from(e)),
+      ),
+      competencesAMettreEnAvant: List<String>.from(data['competencesAMettreEnAvant'] ?? []),
+      connaissancesAMettreEnAvant: List<String>.from(data['connaissancesAMettreEnAvant'] ?? []),
       cvGenereUrl: data['cvGenereUrl'] as String?,
       lmGeneree: data['lmGeneree'] as String?,
       statut: statutFromString(data['statut'] as String? ?? 'a_postuler'),
@@ -132,6 +146,10 @@ class Candidature {
       'competencesMatchees': competencesMatchees,
       'scoreMatching': scoreMatching,
       'raisonsMatching': raisonsMatching,
+      'profilResume': profilResume,
+      'experiencesTexte': experiencesTexte,
+      'competencesAMettreEnAvant': competencesAMettreEnAvant,
+      'connaissancesAMettreEnAvant': connaissancesAMettreEnAvant,
       'cvGenereUrl': cvGenereUrl,
       'lmGeneree': lmGeneree,
       'statut': statutToString(statut),
@@ -156,6 +174,10 @@ class Candidature {
       competencesMatchees: competencesMatchees,
       scoreMatching: scoreMatching,
       raisonsMatching: raisonsMatching,
+      profilResume: profilResume,
+      experiencesTexte: experiencesTexte,
+      competencesAMettreEnAvant: competencesAMettreEnAvant,
+      connaissancesAMettreEnAvant: connaissancesAMettreEnAvant,
       cvGenereUrl: cvGenereUrl ?? this.cvGenereUrl,
       lmGeneree: lmGeneree ?? this.lmGeneree,
       statut: statut ?? this.statut,

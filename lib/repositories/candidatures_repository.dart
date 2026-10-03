@@ -31,4 +31,8 @@ class CandidaturesRepository {
       'historique': FieldValue.arrayUnion([evenement.toMap()]),
     });
   }
+
+  Future<void> supprimer(String uid, String candidatureId) {
+    return _collection(uid).doc(candidatureId).delete();
+  }
 }

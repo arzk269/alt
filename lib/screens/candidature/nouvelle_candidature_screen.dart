@@ -1,10 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/candidature.dart';
+import '../../models/profil.dart';
+import '../../models/formation.dart';
 import '../../repositories/candidatures_repository.dart';
+import '../../repositories/profil_repository.dart';
+import '../../repositories/formation_repository.dart';
 import '../../services/matching_service.dart';
+import '../../services/pdf_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gauge.dart';
+import '../../widgets/cv_preview.dart';
 
 enum _Stage { input, loadingMatch, result, loadingGeneration, generated, erreur }
 
@@ -20,13 +26,19 @@ class _NouvelleCandidatureScreenState extends State<NouvelleCandidatureScreen> {
   final String uid = FirebaseAuth.instance.currentUser!.uid;
   final _matchingService = MatchingService();
   final _candidaturesRepository = CandidaturesRepository();
+  final _profilRepository = ProfilRepository();
+  final _formationRepository = FormationRepository();
+  final _pdfService = PdfService();
   final _offreController = TextEditingController();
 
   _Stage _stage = _Stage.input;
   MatchingResultDto? _matching;
-  GenerationResultDto? _generation;
+  Candidature? _candidatureCreee;
+  Profil? _profilComplet;
+  List<Formation> _formationsCompletes = [];
   String? _erreur;
   int _tab = 0;
+  bool _telechargementEnCours = false;
 
   Future<void> _analyser() async {
     final texte = _offreController.text.trim();
@@ -62,7 +74,10 @@ class _NouvelleCandidatureScreenState extends State<NouvelleCandidatureScreen> {
         matching: _matching!,
       );
 
-      final candidature = Candidature(
+      final profil = await _profilRepository.watchProfil(uid).first;
+      final formations = await _formationRepository.watchAll(uid).first;
+
+      final brouillon = Candidature(
         id: '',
         poste: _matching!.poste.isNotEmpty ? _matching!.poste : 'Poste non précisé',
         entreprise: _matching!.entreprise.isNotEmpty ? _matching!.entreprise : 'Entreprise non précisée',
@@ -71,16 +86,39 @@ class _NouvelleCandidatureScreenState extends State<NouvelleCandidatureScreen> {
         competencesMatchees: _matching!.competencesMatchees,
         scoreMatching: _matching!.scoreMatching,
         raisonsMatching: _matching!.raisonsMatching,
+        profilResume: generation.profilResume,
+        experiencesTexte: generation.experiencesTexte,
+        competencesAMettreEnAvant: generation.competencesAMettreEnAvant,
+        connaissancesAMettreEnAvant: generation.connaissancesAMettreEnAvant,
         lmGeneree: generation.lettreMotivation,
         statut: StatutCandidature.aPostuler,
         historique: [EvenementHistorique(type: TypeEvenement.ajoutee, date: DateTime.now())],
         createdAt: DateTime.now(),
       );
-      await _candidaturesRepository.ajouterCandidature(uid, candidature);
+      final id = await _candidaturesRepository.ajouterCandidature(uid, brouillon);
 
       if (!mounted) return;
       setState(() {
-        _generation = generation;
+        _candidatureCreee = Candidature(
+          id: id,
+          poste: brouillon.poste,
+          entreprise: brouillon.entreprise,
+          offreTexteBrut: brouillon.offreTexteBrut,
+          domainePoste: brouillon.domainePoste,
+          competencesMatchees: brouillon.competencesMatchees,
+          scoreMatching: brouillon.scoreMatching,
+          raisonsMatching: brouillon.raisonsMatching,
+          profilResume: brouillon.profilResume,
+          experiencesTexte: brouillon.experiencesTexte,
+          competencesAMettreEnAvant: brouillon.competencesAMettreEnAvant,
+          connaissancesAMettreEnAvant: brouillon.connaissancesAMettreEnAvant,
+          lmGeneree: brouillon.lmGeneree,
+          statut: brouillon.statut,
+          historique: brouillon.historique,
+          createdAt: brouillon.createdAt,
+        );
+        _profilComplet = profil;
+        _formationsCompletes = formations;
         _stage = _Stage.generated;
       });
     } catch (e) {
@@ -92,12 +130,28 @@ class _NouvelleCandidatureScreenState extends State<NouvelleCandidatureScreen> {
     }
   }
 
+  Future<void> _telechargerPdf() async {
+    if (_candidatureCreee == null || _profilComplet == null) return;
+    setState(() => _telechargementEnCours = true);
+    try {
+      await _pdfService.genererEtTelecharger(
+        candidature: _candidatureCreee!,
+        profil: _profilComplet!,
+        formations: _formationsCompletes,
+      );
+    } finally {
+      if (mounted) setState(() => _telechargementEnCours = false);
+    }
+  }
+
   void _recommencer() {
     setState(() {
       _stage = _Stage.input;
       _offreController.clear();
       _matching = null;
-      _generation = null;
+      _candidatureCreee = null;
+      _profilComplet = null;
+      _formationsCompletes = [];
       _erreur = null;
       _tab = 0;
     });
@@ -237,6 +291,29 @@ class _NouvelleCandidatureScreenState extends State<NouvelleCandidatureScreen> {
             ],
           ),
         ),
+        if (matching.competencesManquantes.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Ce qui manque pour cette offre', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text('Exigences de l\'offre non couvertes par ton profil actuel.', style: TextStyle(fontSize: 12.5, color: AppColors.inkFaint)),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: matching.competencesManquantes.map((c) => Chip(
+                    backgroundColor: AppColors.brickSoft,
+                    side: BorderSide(color: AppColors.brick.withOpacity(0.2)),
+                    label: Text(c, style: monoStyle(size: 12, color: AppColors.brick)),
+                  )).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         Row(children: [
           ElevatedButton.icon(
@@ -252,7 +329,9 @@ class _NouvelleCandidatureScreenState extends State<NouvelleCandidatureScreen> {
   }
 
   Widget _buildGenerated() {
-    final generation = _generation!;
+    final candidature = _candidatureCreee!;
+    final profil = _profilComplet;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -270,34 +349,26 @@ class _NouvelleCandidatureScreenState extends State<NouvelleCandidatureScreen> {
           _tabButton('CV', 0),
           const SizedBox(width: 4),
           _tabButton('Lettre de motivation', 1),
+          const Spacer(),
+          if (_tab == 0)
+            OutlinedButton.icon(
+              onPressed: _telechargementEnCours ? null : _telechargerPdf,
+              icon: _telechargementEnCours
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download, size: 15),
+              label: const Text('Télécharger en PDF'),
+            ),
         ]),
         const SizedBox(height: 12),
-        _card(
-          child: _tab == 0
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Résumé de profil', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.inkFaint)),
-                    const SizedBox(height: 6),
-                    Text(generation.profilResume, style: const TextStyle(fontSize: 14, height: 1.5)),
-                    const SizedBox(height: 20),
-                    const Text('Expériences mises en avant', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.inkFaint)),
-                    const SizedBox(height: 10),
-                    ...generation.experiencesTexte.map((e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${e['titre']} — ${e['entreprise']}', style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 3),
-                          Text(e['description'] ?? '', style: const TextStyle(fontSize: 13, color: AppColors.inkSoft, height: 1.4)),
-                        ],
-                      ),
-                    )),
-                  ],
-                )
-              : Text(generation.lettreMotivation, style: const TextStyle(fontSize: 14, height: 1.6)),
-        ),
+        if (_tab == 0 && profil != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: CvPreview(candidature: candidature, profil: profil, formations: _formationsCompletes),
+          )
+        else if (_tab == 1)
+          _card(
+            child: Text(candidature.lmGeneree ?? '', style: const TextStyle(fontSize: 14, height: 1.6)),
+          ),
         const SizedBox(height: 20),
         OutlinedButton(onPressed: _recommencer, child: const Text('Analyser une autre offre')),
       ],
